@@ -28,11 +28,13 @@ jobs:
       - name: Generate Gradle Wrapper
         working-directory: mfga-xposed
         run: |
-          gradle wrapper --gradle-version 8.9
+          gradle wrapper --gradle-version 9.5.0
           chmod +x gradlew
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
 
       - name: Accept SDK licenses
         run: yes | sdkmanager --licenses || true

@@ -2,6 +2,7 @@ package com.mfga.xposed;
 
 import android.graphics.Typeface;
 import android.os.Build;
+import android.util.Log;
 
 /**
  * legacy / modern 两套入口共用的核心逻辑。
@@ -16,8 +17,11 @@ import android.os.Build;
  *
  * 注意：Typeface.create(...) 内部在部分 Android 版本上也可能间接
  * 走回 Builder，为避免无限递归，用 ThreadLocal 做重入保护。
+ *
  */
 public final class FontForceCore {
+
+    private static final String TAG = "MFGA";
 
     private static final ThreadLocal<Boolean> IN_REPLACEMENT =
             ThreadLocal.withInitial(() -> Boolean.FALSE);
@@ -38,12 +42,13 @@ public final class FontForceCore {
         IN_REPLACEMENT.set(Boolean.TRUE);
         try {
             int style = original != null ? original.getStyle() : Typeface.NORMAL;
+            boolean italic = isItalicSafe(original);
+            int weight = resolveIntendedWeight(original);
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && original != null) {
-                int weight = original.getWeight();
-                boolean italic = original.isItalic();
-                if (weight > 0) {
-                    return Typeface.create(Typeface.DEFAULT, weight, italic);
+            if (weight > 0) {
+                Typeface bucketed = bucketedFamilyReplacement(weight, italic, style);
+                if (bucketed != null) {
+                    return bucketed;
                 }
             }
             return Typeface.create(Typeface.DEFAULT, style);
@@ -52,6 +57,73 @@ public final class FontForceCore {
             return Typeface.DEFAULT;
         } finally {
             IN_REPLACEMENT.set(Boolean.FALSE);
+        }
+    }
+
+    /**
+     * 读取真实的 weight。getWeight() 是 API 28(P)才加入的公开方法，
+     * 更早的系统上直接跳过，交给调用方走 style 兜底。
+     */
+    private static int resolveIntendedWeight(Typeface original) {
+        if (original == null) {
+            return -1;
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            try {
+                int weight = original.getWeight();
+                if (weight > 0) {
+                    return weight;
+                }
+            } catch (Throwable t) {
+                Log.w(TAG, "getWeight failed", t);
+            }
+        }
+        return -1;
+    }
+
+    private static boolean isItalicSafe(Typeface original) {
+        if (original == null) {
+            return false;
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            try {
+                return original.isItalic();
+            } catch (Throwable ignored) {
+                // fall through to style-based check below
+            }
+        }
+        return (original.getStyle() & Typeface.ITALIC) != 0;
+    }
+
+    /**
+     * 把任意 weight 量化到系统里"确定存在静态字重文件、不会触发
+     * 伪粗体合成"的几档命名字重，而不是直接把 weight 整数塞给
+     * Typeface.create(family, weight, italic)。
+     *
+     * 未知 family 名字在各 Android 版本上的行为是回退到默认字体而
+     * 不是抛异常/返回 null，但这里仍然做了防御性判断，避免极少数
+     * 定制 ROM 上出现异常行为时波及调用方。
+     */
+    private static Typeface bucketedFamilyReplacement(int weight, boolean italic, int style) {
+        String familyName = weight >= 650 ? "sans-serif-black"
+                : weight >= 550 ? "sans-serif-medium"
+                : "sans-serif";
+        int wantStyle = italic ? Typeface.ITALIC : Typeface.NORMAL;
+        try {
+            Typeface bucketed = Typeface.create(familyName, wantStyle);
+            if (bucketed != null) {
+                return bucketed;
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "create(familyName=" + familyName + ") failed", t);
+        }
+        // 命名字重在这台设备/这个 App 进程里不可用，退回最基础的
+        // style 兜底，绝不使用 Typeface.create(family, weight, italic)
+        // 的任意 weight 合成，避免伪粗体。
+        try {
+            return Typeface.create(Typeface.DEFAULT, style);
+        } catch (Throwable t) {
+            return Typeface.DEFAULT;
         }
     }
 }
