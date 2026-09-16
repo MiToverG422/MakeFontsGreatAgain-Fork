@@ -1,17 +1,16 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
 }
 
 android {
     namespace = "com.mfga.xposed"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.mfga.xposed"
-        targetSdk = 36
-        versionCode = 13
-        versionName = "1.3"
+        targetSdk = 37
+        versionCode = 15
+        versionName = "1.5"
     }
 
     buildTypes {
@@ -24,11 +23,14 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-    }
 
-    sourceSets["main"].resources.srcDirs("src/main/resources")
+    sourceSets["main"].resources.directories.add("src/main/resources")
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
 }
 
 dependencies {

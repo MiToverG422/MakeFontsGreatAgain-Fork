@@ -1,6 +1,7 @@
 package com.mfga.xposed.legacy;
 
 import android.graphics.Typeface;
+import android.os.Build;
 import android.util.Log;
 
 import com.mfga.xposed.FontForceCore;
@@ -18,14 +19,14 @@ public class LegacyEntry implements IXposedHookLoadPackage {
 
     private static final String TAG = "MFGA";
     private static final java.util.Set<String> TARGET_PACKAGES = new java.util.HashSet<>(
-            java.util.Arrays.asList("com.github.android", "com.twitter.android", "org.telegram.messenger", "xyz.nextalone.nagram", "com.zhiliaoapp.musically", "com.google.android.youtube"));
+            java.util.Arrays.asList("com.github.android", "com.twitter.android", "org.telegram.messenger", "xyz.nextalone.nagram", "com.zhiliaoapp.musically", "com.google.android.youtube", "com.reddit.frontpage"));
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
         if (!TARGET_PACKAGES.contains(lpparam.packageName)) {
             return;
         }
-        Log.i(TAG, "MFGA v1.3 (legacy) attach: " + lpparam.packageName);
+        Log.i(TAG, "MFGA v1.5 (legacy) attach: " + lpparam.packageName);
 
         XC_MethodHook replaceWithSystemFont = new XC_MethodHook() {
             @Override
@@ -82,6 +83,25 @@ public class LegacyEntry implements IXposedHookLoadPackage {
                     Typeface.class, "createFromFile",
                     String.class, replaceWithSystemFont);
         } catch (Throwable ignored) {
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            try {
+                XposedHelpers.findAndHookMethod(
+                        Typeface.class, "create",
+                        Typeface.class, int.class, boolean.class,
+                        replaceWithSystemFont);
+            } catch (Throwable t) {
+                Log.w(TAG, "hook Typeface.create(Typeface,int,boolean) failed", t);
+            }
+        }
+        try {
+            XposedHelpers.findAndHookMethod(
+                    Typeface.class, "create",
+                    Typeface.class, int.class,
+                    replaceWithSystemFont);
+        } catch (Throwable t) {
+            Log.w(TAG, "hook Typeface.create(Typeface,int) failed", t);
         }
     }
 }
